@@ -1,4 +1,6 @@
 mod parsing;
+mod runtime;
+mod ast;
 
 #[no_mangle]
 fn main() {
