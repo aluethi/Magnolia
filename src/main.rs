@@ -1,24 +1,61 @@
-mod parsing;
-mod runtime;
-mod ast;
+use std::{
+    error::Error, fs, io::{stdout, Write}, str
+};
 
-#[no_mangle]
+mod lexer;
+mod token;
+mod error;
+
 fn main() {
-    println!("Hello, world!");
+    let args: Vec<_> = std::env::args().collect();
+    if args.len() > 2 {
+        println!("Usage: {} [script]", args[0]);
+    } else if args.len() == 2 {
+        run_file(args[1].as_str());
+    } else {
+        run_prompt();
+    }
 }
 
-#[no_mangle]
-fn malloc(size:usize) -> *mut u8 {
-    let mut vec = Vec::with_capacity(size);
-    let ptr = vec.as_mut_ptr();
-    core::mem::forget(vec);
-    return ptr;
+fn run_file(path: &str) -> Result<(), Box<dyn Error>> {
+    let byte_content = fs::read(path)?;
+    let content = str::from_utf8(&byte_content)?;
+    run(content)?;
+    Ok(())
 }
 
-#[no_mangle]
-fn run(ptr:usize, len:usize) -> f64 {
-    let wasm_bytes = unsafe {
-        Vec::from_raw_parts(ptr, len, len)
-    };
-    
+fn run_prompt() -> Result<(), Box<dyn Error>> {
+    loop {
+        print!("> ");
+        stdout().flush()?;
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        if(input.is_empty()) {
+            return Ok(()); // EOF
+        }
+
+        match run(input.as_str()) {
+            Ok(_) => {},
+            Err(e) => eprintln!("{}", e),
+        }
+    }
+}
+
+fn run(source: &str) -> Result<(), Box<dyn Error>> {
+    let lexer = lexer::Lexer::new(source);
+    for token in lexer {
+        match token {
+            Ok(token) => println!("{:?}", token),
+            Err(e) => eprintln!("{}", e),
+        }
+    }
+    Ok(())
+}
+
+fn error(line: usize, message: &str) {
+    report(line, "", message);
+}
+
+fn report(line: usize, location: &str, message: &str) {
+    eprintln!("[line {}] Error {}: {}", line, location, message);
 }
