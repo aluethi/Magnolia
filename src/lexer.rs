@@ -9,6 +9,8 @@ use crate::token::{
     Token,
     TokenKind,
     Span,
+    FloatKind,
+    IntegerKind,
 };
 
 #[derive(Debug)]
@@ -75,7 +77,7 @@ impl<'a> Lexer<'a> {
         if let Some((pos, _)) = self.iter.peek().cloned() {
             end = pos;
         }
-        Some(Token::new(TokenKind::StringLiteral(&self.source[start..end]), 
+        Some(Token::new(TokenKind::String(&self.source[start..end]), 
             Span { start: start as u32, end: end as u32 }))
     }
 
@@ -130,10 +132,43 @@ impl<'a> Lexer<'a> {
             (false, src)
         };
 
-        if(num == "inf" || num == "nan") {
-            return Some(Token::new(TokenKind::FloatLiteral(&self.source[0..src.len()]),
+        if num == "inf" {
+            return Some(Token::new(TokenKind::Float(FloatKind::Inf { src, negative }),
+                Span { start: 0, end: src.len() as u32 }));
+        } else if num == "nan" {
+            return Some(Token::new(TokenKind::Float(FloatKind::Nan { src, negative, value: None }),
+                Span { start: 0, end: src.len() as u32 }));
+        } else if num.starts_with("nan:0x") {
+            let value = u64::from_str_radix(&num[6..], 16).ok();
+            return Some(Token::new(TokenKind::Float(FloatKind::Nan { src, negative, value }),
                 Span { start: 0, end: src.len() as u32 }));
         }
+
+        let(mut iterator, is_hex, test_valid) = if num.starts_with("0x") {
+            (num[2..].chars(), true, char::is_ascii_hexdigit as fn(&char) -> bool)
+        } else {
+            (num.chars(), false, char::is_ascii_digit as fn(&char) -> bool)
+        };
+
+        let mut integral: String = String::new();
+        while let Some(c) = iterator.next() {
+            if test_valid(&c) {
+                integral.push(c);
+            } else {
+                break;
+            }
+        }
+
+        if iterator.clone().next().is_none() {
+            if is_hex {
+                return Some(Token::new(TokenKind::Integer(IntegerKind::Hex { src: num, negative }),
+                    Span { start: 0, end: src.len() as u32 }));
+            } else {
+                return Some(Token::new(TokenKind::Integer(IntegerKind::Decimal { src: num, negative }),
+                    Span { start: 0, end: src.len() as u32 }));
+            }
+        }
+
         None
     }
 

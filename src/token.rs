@@ -27,9 +27,9 @@ pub enum TokenKind<'a> {
     
     // Literals
     Identifier(&'a str), // starts with $
-    StringLiteral(&'a str),
-    IntLiteral(&'a str),
-    FloatLiteral(Float<'a>),
+    String(&'a str),
+    Integer(IntegerKind<'a>),
+    Float(FloatKind<'a>),
 
     Keyword(&'a str),
     Reserved(&'a str),
@@ -39,21 +39,30 @@ pub enum TokenKind<'a> {
 }
 
 #[derive(Debug)]
-pub struct Float<'a> {
-    pub src: &'a str,
-    pub value: FloatValue,
+pub enum IntegerKind<'a> {
+    Decimal {
+        src: &'a str,
+        negative: bool,
+    },
+    Hex {
+        src: &'a str,
+        negative: bool,
+    }
 }
 
 #[derive(Debug)]
-pub enum FloatValue {
+pub enum FloatKind<'a> {
     Inf {
+        src: &'a str,
         negative: bool,
     },
     Nan {
+        src: &'a str,
         negative: bool,
         value: Option<u64>,
     },
     Val {
+        src: &'a str,
         negative: bool,
         integral: u64,
         fractional: u64,
