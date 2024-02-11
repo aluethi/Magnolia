@@ -64,8 +64,8 @@ pub enum FloatKind<'a> {
     Val {
         src: &'a str,
         negative: bool,
-        integral: u64,
-        fractional: u64,
-        exponent: i64,
+        integral: &'a str,
+        fractional: &'a str,
+        exponent: &'a str,
     }
 }

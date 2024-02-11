@@ -1,3 +1,7 @@
+1111
+-12.123123
++12.123123
+12.2234545324652
 (module
     (import "env" "print_string" (func $print_string (param i32)))
     (import "env" "buffer" (memory 1))

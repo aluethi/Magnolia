@@ -2,7 +2,7 @@ use crate::error::Error;
 
 use std::{
     iter,
-    str,
+    str::{self, CharIndices},
 };
 
 use crate::token::{
@@ -112,7 +112,7 @@ impl<'a> Lexer<'a> {
         let reserved = &self.source[start..end];
 
         if let Some(number) = self.number(reserved) {
-            Some(number)
+            Some(Token::new(number, Span { start: start as u32, end: end as u32 }))
         } else if let Some(keyword) = self.keyword(reserved) {
             Some(keyword)
         } else if let Some(identifier) = self.identifier(reserved) {
@@ -123,7 +123,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn number(&mut self, src: &'a str) -> Option<Token<'a>> {
+    fn number(&mut self, src: &'a str) -> Option<TokenKind<'a>> {
         let (negative, num) = if src.starts_with('-') {
             (true, &src[1..])
         } else if src.starts_with('+') {
@@ -133,43 +133,65 @@ impl<'a> Lexer<'a> {
         };
 
         if num == "inf" {
-            return Some(Token::new(TokenKind::Float(FloatKind::Inf { src, negative }),
-                Span { start: 0, end: src.len() as u32 }));
+            return Some(TokenKind::Float(FloatKind::Inf { src, negative }));
         } else if num == "nan" {
-            return Some(Token::new(TokenKind::Float(FloatKind::Nan { src, negative, value: None }),
-                Span { start: 0, end: src.len() as u32 }));
+            return Some(TokenKind::Float(FloatKind::Nan { src, negative, value: None }));
         } else if num.starts_with("nan:0x") {
             let value = u64::from_str_radix(&num[6..], 16).ok();
-            return Some(Token::new(TokenKind::Float(FloatKind::Nan { src, negative, value }),
-                Span { start: 0, end: src.len() as u32 }));
+            return Some(TokenKind::Float(FloatKind::Nan { src, negative, value }));
         }
 
+        // Are we dealing with a hex or decimal number?
         let(mut iterator, is_hex, test_valid) = if num.starts_with("0x") {
-            (num[2..].chars(), true, char::is_ascii_hexdigit as fn(&char) -> bool)
+            (num[2..].char_indices(), true, char::is_ascii_hexdigit as fn(&char) -> bool)
         } else {
-            (num.chars(), false, char::is_ascii_digit as fn(&char) -> bool)
+            (num.char_indices(), false, char::is_ascii_digit as fn(&char) -> bool)
         };
 
-        let mut integral: String = String::new();
-        while let Some(c) = iterator.next() {
-            if test_valid(&c) {
-                integral.push(c);
+        // Parse the integral part of the number
+        let integral = Self::consume_digits(&mut iterator, test_valid).unwrap();
+
+        let it = iterator.clone().next();
+        if it.is_none() { // If there are no more characters, we have a valid integer
+            if is_hex {
+                return Some(TokenKind::Integer(IntegerKind::Hex { src: integral, negative }));
             } else {
-                break;
+                return Some(TokenKind::Integer(IntegerKind::Decimal { src: integral, negative }));
             }
+        } else if let Some((_,'.')) = it { // If there is a decimal point, we have a float
+            iterator.next();
+        } else { // Otherwise, we have an invalid number
+            return None;
         }
+
+        // Parse the fractional part of the number
+        let fractional= Self::consume_digits(&mut iterator, test_valid).unwrap();
+
+        // If there is an exponent, we have a float
+
+
+//        if iterator.clone().next() == Some('e') || iterator.clone().next() == Some('E')
+//        || iterator.clone().next() == Some('p') || iterator.clone().next() == Some('P') {
+//            let mut exponent: String = String::new();
+//            if iterator.clone().next() == Some('-') || iterator.clone().next() == Some('+') {
+//                exponent.push(iterator.next().unwrap());
+//            }
+//            while let Some(c) = iterator.next() {
+//                if test_valid(&c) {
+//                    exponent.push(c);
+//                } else {
+//                    break;
+//                }
+//            }
+//        }
 
         if iterator.clone().next().is_none() {
-            if is_hex {
-                return Some(Token::new(TokenKind::Integer(IntegerKind::Hex { src: num, negative }),
-                    Span { start: 0, end: src.len() as u32 }));
-            } else {
-                return Some(Token::new(TokenKind::Integer(IntegerKind::Decimal { src: num, negative }),
-                    Span { start: 0, end: src.len() as u32 }));
-            }
-        }
+            return Some(TokenKind::Float(FloatKind::Val { src: num, negative, integral, fractional, exponent: "" }));
+        } else {
+            //None
 
-        None
+            return Some(TokenKind::Float(FloatKind::Val { src: num, negative, integral, fractional, exponent: "" }));
+        }
     }
 
     fn keyword(&mut self, src: &'a str) -> Option<Token<'a>> {
@@ -201,6 +223,21 @@ impl<'a> Lexer<'a> {
         }
         Some(Token::new(TokenKind::Identifier(&self.source[start..end]),
             Span { start: start as u32, end: end as u32 }))
+    }
+
+    fn consume_digits(it: &mut CharIndices<'a>, good: fn(&char) -> bool) -> Option<&'a str> {
+        let src = it.as_str();
+        let (start, _) = it.clone().next()?;
+        let mut end = start;
+        while let Some((pos, c)) = it.clone().next() {
+            if good(&c) {
+                end = pos + 1;
+                it.next();
+            } else {
+                break;
+            }
+        }
+        Some(&src[0..end-start])
     }
 
     fn is_alpha(c: char) -> bool {
